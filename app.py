@@ -16,14 +16,37 @@ def generate_ai_response(prompt):
     except Exception as e:
         return f"Error generating response: {str(e)}"
 
+# Check relevance of response to question/output
+def check_relevance(question, response):
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        relevance_prompt = (
+            f"On a scale of 0 to 10, how relevant is the following response to the given question or statement?\n"
+            f"Question/Statement: {question}\n"
+            f"Response: {response}\n"
+            f"Provide a numeric score (0-10) and a brief explanation."
+        )
+        relevance_response = model.generate_content(relevance_prompt).text
+        # Extract the numeric score from the response
+        score_line = [line for line in relevance_response.split('\n') if "Score:" in line]
+        if score_line:
+            score = int(score_line[0].split("Score:")[1].strip())
+            return min(10, max(0, score))
+        else:
+            return 5  # Default if parsing fails
+    except Exception as e:
+        st.warning(f"Error checking relevance: {str(e)}. Defaulting to 5.")
+        return 5
+
 # Check for forbidden words
 def contains_forbidden_words(prompt, forbidden_words):
     return any(word.lower() in prompt.lower() for word in forbidden_words)
 
-# Improved scoring system
-def score_prompt(prompt, ai_response, forbidden_words, round_type):
+# Updated scoring system with relevance-based accuracy
+def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
+    accuracy = check_relevance(question, ai_response)
     scores = {
-        "accuracy": min(10, 5 + len(ai_response.split()) // 10),
+        "accuracy": accuracy,
         "creativity": min(10, len(set(prompt.split())) // 2),
         "clarity": min(10, 10 - abs(15 - len(prompt.split())) // 2),
         "efficiency": min(10, 10 - len(prompt.split()) // 5) if len(prompt.split()) > 0 else 0,
@@ -38,7 +61,7 @@ def score_prompt(prompt, ai_response, forbidden_words, round_type):
     total_score = sum(scores.values())
     return total_score, scores
 
-# Round generators (Round 1 and Round 3 restored to original)
+# Round generators
 def generate_round1():
     questions = [
         "Explain what photosynthesis is.",
@@ -96,7 +119,7 @@ def generate_round3():
 # Main app
 def main():
     st.title("🚀 Prompt Engineering Challenge - College Edition")
-    st.write(f"Date: {datetime.now().strftime('%B %d, %Y')} | For MCA & MMS Students")
+    st.write(f"Date: {datetime.now().strftime('%B %d, %Y')}")
 
     # Initialize session state
     if "round" not in st.session_state:
@@ -132,12 +155,12 @@ def main():
             else:
                 ai_response = generate_ai_response(user_prompt)
                 st.write(f"**AI Response:** {ai_response}")
-                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round1")
+                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round1", st.session_state.question)
                 st.session_state.round_scores.append(("Round 1", score))
                 st.session_state.total_score += score
                 st.session_state.history.append({
                     "round": "Round 1",
-                    "question": st.session_state.question,  # Store the question
+                    "question": st.session_state.question,
                     "prompt": user_prompt,
                     "response": ai_response,
                     "score": score,
@@ -164,12 +187,12 @@ def main():
             else:
                 ai_response = generate_ai_response(user_prompt)
                 st.write(f"**AI Response:** {ai_response}")
-                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round2")
+                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round2", st.session_state.ai_output)
                 st.session_state.round_scores.append(("Round 2", score))
                 st.session_state.total_score += score
                 st.session_state.history.append({
                     "round": "Round 2",
-                    "question": st.session_state.ai_output,  # Store the AI output as the "question"
+                    "question": st.session_state.ai_output,
                     "prompt": user_prompt,
                     "response": ai_response,
                     "score": score,
@@ -196,12 +219,12 @@ def main():
             else:
                 ai_response = generate_ai_response(user_prompt)
                 st.write(f"**AI Response:** {ai_response}")
-                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round3")
+                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round3", st.session_state.question)
                 st.session_state.round_scores.append(("Round 3", score))
                 st.session_state.total_score += score
                 st.session_state.history.append({
                     "round": "Round 3",
-                    "question": st.session_state.question,  # Store the challenge
+                    "question": st.session_state.question,
                     "prompt": user_prompt,
                     "response": ai_response,
                     "score": score,
@@ -232,12 +255,11 @@ def main():
             st.session_state.history = []
             st.session_state.show_next_round_button = False
 
-    # Round 5: Review Mode with Questions
+    # Round 5: Review Mode (Fixed)
     elif st.session_state.round == 5:
         st.write(f"### Review Your Game | Player: {st.session_state.player_name}")
         for entry in st.session_state.history:
             st.write(f"#### {entry['round']}")
-            # Display the question/output appropriately based on the round
             if entry['round'] == "Round 2":
                 st.write(f"**AI Output:** {entry['question']}")
             else:
@@ -245,7 +267,7 @@ def main():
             st.write(f"**Your Prompt:** {entry['prompt']}")
             st.write(f"**AI Response:** {entry['response']}")
             st.write(f"**Score:** {entry['score']}/50")
-            st.write(f"**Breakdown:** {entry['breakdown']}")
+            st.write(f"**Breakdown:** {entry['breakdown']}")  # Fixed to use entry['breakdown']
             st.write("---")
         if st.button("Back to Results"):
             st.session_state.round = 4
