@@ -32,7 +32,6 @@ def check_relevance(question, response):
                 f"- **Relevance**: Does the user’s prompt address the core of the question and provide clear direction for generating a meaningful response?\n"
                 f"- **Creativity**: How innovative or unique is the user’s approach to framing the prompt? Does it introduce new angles or perspectives?\n"
                 f"- **Clarity**: Is the prompt easy to understand and interpret? Are the instructions clear and concise?\n"
-                f"- **Efficiency**: Does the prompt efficiently encourage a detailed, yet focused response without unnecessary complexity?\n\n"
                 
                 f"Each round will evaluate the quality of the prompt in these categories, and a score should be assigned from 1 to 10 for each.\n\n"
                 
@@ -44,7 +43,6 @@ def check_relevance(question, response):
                 f"- **Relevance**: X/10\n"
                 f"- **Creativity**: Y/10\n"
                 f"- **Clarity**: Z/10\n"
-                f"- **Efficiency**: W/10\n\n"
                 
                 f"Example:\n\n"
                 f"Question: {question}\n"
@@ -70,7 +68,7 @@ def contains_forbidden_words(prompt, forbidden_words):
 # Updated scoring system with relevance-based accuracy and input validation
 def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
     if not prompt.strip():
-        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, "rule_compliance": 0}
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, }
     
     try:
         accuracy = check_relevance(question, ai_response)
@@ -78,8 +76,6 @@ def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
             "accuracy": accuracy,
             "creativity": min(10, len(set(prompt.split())) // 2),
             "clarity": min(10, 10 - abs(15 - len(prompt.split())) // 2),
-            "efficiency": min(10, 10 - len(prompt.split()) // 5) if len(prompt.split()) > 0 else 0,
-            "rule_compliance": 10 if not contains_forbidden_words(prompt, forbidden_words) else 0
         }
         if round_type == "round1":
             scores["creativity"] = min(10, scores["creativity"] + 2)
@@ -91,7 +87,7 @@ def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
         return total_score, scores
     except Exception as e:
         st.error(f"Error calculating score: {str(e)}")
-        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, "rule_compliance": 0}
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, }
 
 # Round generators
 def generate_round1():
