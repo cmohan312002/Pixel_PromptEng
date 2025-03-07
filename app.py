@@ -2,9 +2,13 @@ import streamlit as st
 import google.generativeai as genai
 import random
 from datetime import datetime
+import re
 
 # Access the API key from Streamlit secrets
-api_key = st.secrets["GEMINI_API_KEY"]
+api_key = st.secrets.get("GEMINI_API_KEY")
+if not api_key:
+    st.error("API key is missing. Please check your Streamlit secrets.")
+    st.stop()
 genai.configure(api_key=api_key)
 
 # Enhanced AI response generation with error handling
@@ -21,16 +25,17 @@ def check_relevance(question, response):
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         relevance_prompt = (
-            f"On a scale of 0 to 10, how relevant is the following response to the given question or statement?\n"
-            f"Question/Statement: {question}\n"
-            f"Response: {response}\n"
-            f"Provide a numeric score (0-10) and a brief explanation."
+  f"Evaluate the following prompt based on its relevance, creativity, clarity, and efficiency. "
+            f"Assign a score out of 10 for each category and provide feedback.\n"
+            f"Question: {question}\n"
+            f"User Prompt: {user_prompt}\n"
+            f"Provide scores in this format: Relevance: X/10, Creativity: Y/10, Clarity: Z/10, Efficiency: W/10."
         )
         relevance_response = model.generate_content(relevance_prompt).text
-        # Extract the numeric score from the response
-        score_line = [line for line in relevance_response.split('\n') if "Score:" in line]
-        if score_line:
-            score = int(score_line[0].split("Score:")[1].strip())
+        # Extract the numeric score using regex
+        score_match = re.search(r"Score:\s*(\d+)", relevance_response)
+        if score_match:
+            score = int(score_match.group(1))
             return min(10, max(0, score))
         else:
             return 5  # Default if parsing fails
@@ -38,28 +43,35 @@ def check_relevance(question, response):
         st.warning(f"Error checking relevance: {str(e)}. Defaulting to 5.")
         return 5
 
-# Check for forbidden words
+# Check for forbidden words (case-insensitive)
 def contains_forbidden_words(prompt, forbidden_words):
     return any(word.lower() in prompt.lower() for word in forbidden_words)
 
-# Updated scoring system with relevance-based accuracy
+# Updated scoring system with relevance-based accuracy and input validation
 def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
-    accuracy = check_relevance(question, ai_response)
-    scores = {
-        "accuracy": accuracy,
-        "creativity": min(10, len(set(prompt.split())) // 2),
-        "clarity": min(10, 10 - abs(15 - len(prompt.split())) // 2),
-        "efficiency": min(10, 10 - len(prompt.split()) // 5) if len(prompt.split()) > 0 else 0,
-        "rule_compliance": 10 if not contains_forbidden_words(prompt, forbidden_words) else 0
-    }
-    if round_type == "round1":
-        scores["creativity"] = min(10, scores["creativity"] + 2)
-    elif round_type == "round2":
-        scores["accuracy"] = min(10, scores["accuracy"] + 2)
-    elif round_type == "round3":
-        scores["clarity"] = min(10, scores["clarity"] + 2)
-    total_score = sum(scores.values())
-    return total_score, scores
+    if not prompt.strip():
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, "rule_compliance": 0}
+    
+    try:
+        accuracy = check_relevance(question, ai_response)
+        scores = {
+            "accuracy": accuracy,
+            "creativity": min(10, len(set(prompt.split())) // 2),
+            "clarity": min(10, 10 - abs(15 - len(prompt.split())) // 2),
+            "efficiency": min(10, 10 - len(prompt.split()) // 5) if len(prompt.split()) > 0 else 0,
+            "rule_compliance": 10 if not contains_forbidden_words(prompt, forbidden_words) else 0
+        }
+        if round_type == "round1":
+            scores["creativity"] = min(10, scores["creativity"] + 2)
+        elif round_type == "round2":
+            scores["accuracy"] = min(10, scores["accuracy"] + 2)
+        elif round_type == "round3":
+            scores["clarity"] = min(10, scores["clarity"] + 2)
+        total_score = sum(scores.values())
+        return total_score, scores
+    except Exception as e:
+        st.error(f"Error calculating score: {str(e)}")
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, "rule_compliance": 0}
 
 # Round generators
 def generate_round1():
@@ -150,7 +162,9 @@ def main():
         st.write(f"**Forbidden Words:** {', '.join(st.session_state.forbidden_words)}")
         user_prompt = st.text_area("Craft your prompt:", height=100)
         if st.button("Submit"):
-            if contains_forbidden_words(user_prompt, st.session_state.forbidden_words):
+            if not user_prompt.strip():
+                st.error("Please enter a prompt before submitting.")
+            elif contains_forbidden_words(user_prompt, st.session_state.forbidden_words):
                 st.error("❌ Oops! You used a forbidden word. Try again!")
             else:
                 ai_response = generate_ai_response(user_prompt)
@@ -182,7 +196,9 @@ def main():
         st.write(f"**Forbidden Words:** {', '.join(st.session_state.forbidden_words)}")
         user_prompt = st.text_area("Guess the prompt:", height=100)
         if st.button("Submit"):
-            if contains_forbidden_words(user_prompt, st.session_state.forbidden_words):
+            if not user_prompt.strip():
+                st.error("Please enter a prompt before submitting.")
+            elif contains_forbidden_words(user_prompt, st.session_state.forbidden_words):
                 st.error("❌ Oops! You used a forbidden word. Try again!")
             else:
                 ai_response = generate_ai_response(user_prompt)
@@ -214,7 +230,9 @@ def main():
         st.write(f"**Forbidden Words:** {', '.join(st.session_state.forbidden_words)}")
         user_prompt = st.text_area("Create your masterpiece:", height=100)
         if st.button("Submit"):
-            if contains_forbidden_words(user_prompt, st.session_state.forbidden_words):
+            if not user_prompt.strip():
+                st.error("Please enter a prompt before submitting.")
+            elif contains_forbidden_words(user_prompt, st.session_state.forbidden_words):
                 st.error("❌ Oops! You used a forbidden word. Try again!")
             else:
                 ai_response = generate_ai_response(user_prompt)
@@ -248,14 +266,11 @@ def main():
         if st.button("Review Previous Rounds"):
             st.session_state.round = 5
         if st.button("Play Again"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
             st.session_state.round = 0
-            st.session_state.player_name = ""
-            st.session_state.round_scores = []
-            st.session_state.total_score = 0
-            st.session_state.history = []
-            st.session_state.show_next_round_button = False
 
-    # Round 5: Review Mode (Fixed)
+    # Round 5: Review Mode
     elif st.session_state.round == 5:
         st.write(f"### Review Your Game | Player: {st.session_state.player_name}")
         for entry in st.session_state.history:
@@ -267,17 +282,14 @@ def main():
             st.write(f"**Your Prompt:** {entry['prompt']}")
             st.write(f"**AI Response:** {entry['response']}")
             st.write(f"**Score:** {entry['score']}/50")
-            st.write(f"**Breakdown:** {entry['breakdown']}")  # Fixed to use entry['breakdown']
+            st.write(f"**Breakdown:** {entry['breakdown']}")
             st.write("---")
         if st.button("Back to Results"):
             st.session_state.round = 4
         if st.button("Play Again"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
             st.session_state.round = 0
-            st.session_state.player_name = ""
-            st.session_state.round_scores = []
-            st.session_state.total_score = 0
-            st.session_state.history = []
-            st.session_state.show_next_round_button = False
 
 if __name__ == "__main__":
     main()
