@@ -11,7 +11,7 @@ if not api_key:
     st.stop()
 genai.configure(api_key=api_key)
 
-# Enhanced AI response generation with error handling
+# AI response generation with error handling
 def generate_ai_response(prompt):
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
@@ -20,288 +20,119 @@ def generate_ai_response(prompt):
     except Exception as e:
         return f"Error generating response: {str(e)}"
 
-# Check relevance of response to question/output
+# Normalize scores to ensure consistency
+def normalize_scores(scores):
+    for key in scores:
+        scores[key] = max(1, min(10, scores[key]))  # Keeping scores between 1 and 10
+    return scores
+
+# Weighted scoring system
+def weighted_score(scores):
+    weights = {"accuracy": 0.4, "creativity": 0.3, "clarity": 0.3}
+    total = sum(scores[k] * weights[k] for k in scores)
+    return round(total, 2)
+
+# Check if prompt contains forbidden words
+def contains_forbidden_words(prompt, forbidden_words):
+    return any(word.lower() in prompt.lower() for word in forbidden_words)
+
+# AI-driven scoring for relevance
 def check_relevance(question, response):
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         relevance_prompt = (
-                f"Evaluate the following user-generated prompt based on its alignment with the given question, "
-                f"the creativity of the approach, clarity in phrasing, and efficiency in eliciting a relevant and insightful response. "
-                f"Each evaluation should be based on the following criteria:\n\n"
-                
-                f"- **Relevance**: Does the user’s prompt address the core of the question and provide clear direction for generating a meaningful response?\n"
-                f"- **Creativity**: How innovative or unique is the user’s approach to framing the prompt? Does it introduce new angles or perspectives?\n"
-                f"- **Clarity**: Is the prompt easy to understand and interpret? Are the instructions clear and concise?\n"
-                
-                f"Each round will evaluate the quality of the prompt in these categories, and a score should be assigned from 1 to 10 for each.\n\n"
-                
-                f"Round 1: Evaluate the user prompt based on basic structure and clarity.\n"
-                f"Round 2: Assess creativity and originality in how the prompt engages with the question.\n"
-                f"Round 3: Evaluate the overall impact of the prompt in driving the best, most insightful response.\n\n"
-                
-                f"Here’s how to structure your evaluation:\n"
-                f"- **Relevance**: X/10\n"
-                f"- **Creativity**: Y/10\n"
-                f"- **Clarity**: Z/10\n"
-                
-                f"Example:\n\n"
-                f"Question: {question}\n"
-                f"User Prompt: {user_prompt}\n\n"
-                f"Feedback: Provide concise feedback explaining the scores and suggestions for improvement."
-            )
+            f"Evaluate the following prompt based on relevance, creativity, and clarity.\n"
+            f"- Relevance: Does it directly relate to the question? (1-10)\n"
+            f"- Creativity: How unique is the approach? (1-10)\n"
+            f"- Clarity: Is the phrasing clear? (1-10)\n"
+            f"\nQuestion: {question}\nUser Prompt: {response}\n"
+            f"Provide scores and a short justification."
+        )
         relevance_response = model.generate_content(relevance_prompt).text
-        # Extract the numeric score using regex
-        score_match = re.search(r"Score:\s*(\d+)", relevance_response)
-        if score_match:
-            score = int(score_match.group(1))
-            return min(10, max(0, score))
-        else:
-            return 5  # Default if parsing fails
+        scores = {"accuracy": 5, "creativity": 5, "clarity": 5}  # Default scores
+        score_matches = re.findall(r"(\w+):\s*(\d+)" , relevance_response)
+        for category, score in score_matches:
+            if category.lower() in scores:
+                scores[category.lower()] = int(score)
+        return normalize_scores(scores)
     except Exception as e:
-        st.warning(f"Error checking relevance: {str(e)}. Defaulting to 5.")
-        return 5
+        st.warning(f"Error checking relevance: {str(e)}. Using default scores.")
+        return {"accuracy": 5, "creativity": 5, "clarity": 5}
 
-# Check for forbidden words (case-insensitive)
-def contains_forbidden_words(prompt, forbidden_words):
-    return any(word.lower() in prompt.lower() for word in forbidden_words)
-
-# Updated scoring system with relevance-based accuracy and input validation
-def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
+# Score a prompt
+def score_prompt(prompt, ai_response, forbidden_words, question):
     if not prompt.strip():
-        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0 }
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0}
     
-    try:
-        accuracy = check_relevance(question, ai_response)
-        scores = {
-            "accuracy": accuracy,
-            "creativity": min(10, len(set(prompt.split())) // 2),
-            "clarity": min(10, 10 - abs(15 - len(prompt.split())) // 2),
-        }
-        if round_type == "round1":
-            scores["creativity"] = min(10, scores["creativity"] + 2)
-        elif round_type == "round2":
-            scores["accuracy"] = min(10, scores["accuracy"] + 2)
-        elif round_type == "round3":
-            scores["clarity"] = min(10, scores["clarity"] + 2)
-        total_score = sum(scores.values())
-        return total_score, scores
-    except Exception as e:
-        st.error(f"Error calculating score: {str(e)}")
-        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0 }
+    scores = check_relevance(question, ai_response)
+    total = weighted_score(scores)
+    return total, scores
 
-# Round generators
+# Round question generators
 def generate_round1():
     questions = [
         "Explain what photosynthesis is.",
         "Describe how a computer works.",
         "What is the significance of the Eiffel Tower?",
-        "Explain the concept of gravity.",
-        "Describe the process of making coffee."
     ]
-    forbidden_words_lists = [
-        ["photosynthesis", "plants", "sunlight", "energy", "chlorophyll"],
-        ["computer", "hardware", "software", "CPU", "memory"],
-        ["Eiffel Tower", "Paris", "landmark", "France", "iron"],
-        ["gravity", "force", "Earth", "mass", "Newton"],
-        ["coffee", "beans", "brew", "grind", "caffeine"]
+    forbidden_words = [
+        ["photosynthesis", "plants", "sunlight"],
+        ["computer", "hardware", "software"],
+        ["Eiffel Tower", "Paris", "France"],
     ]
     index = random.randint(0, len(questions) - 1)
-    return questions[index], forbidden_words_lists[index]
+    return questions[index], forbidden_words[index]
 
-def generate_round2():
-    outputs = [
-        "A system that organizes tasks and resources to optimize team productivity.",
-        "A network of devices communicating wirelessly to monitor environments.",
-        "A framework that predicts market trends using historical data.",
-        "A process that ensures software meets user needs through iterative testing.",
-        "A strategy that aligns team goals with organizational objectives."
-    ]
-    forbidden_words_lists = [
-        ["project", "management", "tasks", "team", "productivity"],
-        ["IoT", "devices", "wireless", "network", "sensors"],
-        ["analytics", "market", "data", "trends", "predict"],
-        ["software", "testing", "user", "bugs", "iteration"],
-        ["strategy", "goals", "team", "organization", "plan"]
-    ]
-    index = random.randint(0, len(outputs) - 1)
-    return outputs[index], forbidden_words_lists[index]
-
-def generate_round3():
-    challenges = [
-        "Generate a bedtime story about an astronaut exploring Mars.",
-        "Write a poem about the ocean without mentioning water.",
-        "Describe a futuristic city without using the word 'technology'.",
-        "Explain how a tree grows without using the word 'photosynthesis'.",
-        "Tell a story about a dragon and a knight without using the word 'fire'."
-    ]
-    forbidden_words_lists = [
-        ["astronaut", "space", "Mars", "rocket", "planet"],
-        ["water", "ocean", "sea", "waves", "liquid"],
-        ["technology", "future", "AI", "robot", "smart"],
-        ["photosynthesis", "sunlight", "chlorophyll", "energy", "plants"],
-        ["fire", "flame", "burn", "heat", "dragon"]
-    ]
-    index = random.randint(0, len(challenges) - 1)
-    return challenges[index], forbidden_words_lists[index]
-
-# Main app
+# Main game function
 def main():
-    st.title("🚀 Prompt Engineering Challenge - College Edition")
+    st.title("🚀 Prompt Engineering Challenge")
     st.write(f"Date: {datetime.now().strftime('%B %d, %Y')}")
-
-    # Initialize session state
+    
     if "round" not in st.session_state:
-        st.session_state.round = 0
-        st.session_state.player_name = ""
-        st.session_state.round_scores = []
-        st.session_state.total_score = 0
-        st.session_state.history = []
-        st.session_state.question = ""
-        st.session_state.forbidden_words = []
-        st.session_state.ai_output = ""
-        st.session_state.show_next_round_button = False
-        st.session_state.submitted_round3 = False
-
-    # Round 0: Get player name and start
+        st.session_state.update({
+            "round": 0, "player_name": "", "total_score": 0,
+            "history": [], "question": "", "forbidden_words": []
+        })
+    
     if st.session_state.round == 0:
-        st.write("Welcome to the challenge! Please enter your name to begin.")
-        player_name = st.text_input("Your Name:")
+        player_name = st.text_input("Enter your name to start:")
         if player_name and st.button("Start Game"):
             st.session_state.player_name = player_name
             st.session_state.round = 1
             st.session_state.question, st.session_state.forbidden_words = generate_round1()
 
-    # Round 1
     elif st.session_state.round == 1:
-        st.write(f"### Round 1: Forbidden Words Challenge | Player: {st.session_state.player_name}")
+        st.write(f"### Round 1 | Player: {st.session_state.player_name}")
         st.write(f"**Question:** {st.session_state.question}")
         st.write(f"**Forbidden Words:** {', '.join(st.session_state.forbidden_words)}")
-        user_prompt = st.text_area("Craft your prompt:", height=100)
+        user_prompt = st.text_area("Craft your prompt:")
         if st.button("Submit"):
             if not user_prompt.strip():
                 st.error("Please enter a prompt before submitting.")
             elif contains_forbidden_words(user_prompt, st.session_state.forbidden_words):
-                st.error("❌ Oops! You used a forbidden word. Try again!")
+                st.error("❌ You used a forbidden word. Try again!")
             else:
                 ai_response = generate_ai_response(user_prompt)
                 st.write(f"**AI Response:** {ai_response}")
-                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round1", st.session_state.question)
-                st.session_state.round_scores.append(("Round 1", score))
-                st.session_state.total_score += score
+                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, st.session_state.question)
                 st.session_state.history.append({
-                    "round": "Round 1",
-                    "question": st.session_state.question,
-                    "prompt": user_prompt,
-                    "response": ai_response,
-                    "score": score,
-                    "breakdown": breakdown
+                    "question": st.session_state.question, "prompt": user_prompt,
+                    "response": ai_response, "score": score, "breakdown": breakdown
                 })
-                st.write(f"**Score:** {score}/30")
-                st.write(f"**Breakdown:** {breakdown}")
-                st.session_state.show_next_round_button = True
+                st.write(f"**Score:** {score}/10")
+                st.session_state.total_score += score
+                if st.button("Finish Game"):
+                    st.session_state.round = 2
 
-        if st.session_state.show_next_round_button and st.button("Next Round"):
-            st.session_state.round = 2
-            st.session_state.show_next_round_button = False
-            st.session_state.ai_output, st.session_state.forbidden_words = generate_round2()
-
-    # Round 2
     elif st.session_state.round == 2:
-        st.write(f"### Round 2: Reverse Engineer the Prompt | Player: {st.session_state.player_name}")
-        st.write(f"**AI Output:** {st.session_state.ai_output}")
-        st.write(f"**Forbidden Words:** {', '.join(st.session_state.forbidden_words)}")
-        user_prompt = st.text_area("Guess the prompt:", height=100)
-        if st.button("Submit"):
-            if not user_prompt.strip():
-                st.error("Please enter a prompt before submitting.")
-            elif contains_forbidden_words(user_prompt, st.session_state.forbidden_words):
-                st.error("❌ Oops! You used a forbidden word. Try again!")
-            else:
-                ai_response = generate_ai_response(user_prompt)
-                st.write(f"**AI Response:** {ai_response}")
-                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round2", st.session_state.ai_output)
-                st.session_state.round_scores.append(("Round 2", score))
-                st.session_state.total_score += score
-                st.session_state.history.append({
-                    "round": "Round 2",
-                    "question": st.session_state.ai_output,
-                    "prompt": user_prompt,
-                    "response": ai_response,
-                    "score": score,
-                    "breakdown": breakdown
-                })
-                st.write(f"**Score:** {score}/30")
-                st.write(f"**Breakdown:** {breakdown}")
-                st.session_state.show_next_round_button = True
-
-        if st.session_state.show_next_round_button and st.button("Next Round"):
-            st.session_state.round = 3
-            st.session_state.show_next_round_button = False
-            st.session_state.question, st.session_state.forbidden_words = generate_round3()
-
-    # Round 3
-    elif st.session_state.round == 3:
-        st.write(f"### Round 3: Creative Prompt Master | Player: {st.session_state.player_name}")
-        st.write(f"**Challenge:** {st.session_state.question}")
-        st.write(f"**Forbidden Words:** {', '.join(st.session_state.forbidden_words)}")
-        user_prompt = st.text_area("Create your masterpiece:", height=100)
-        if st.button("Submit"):
-            if not user_prompt.strip():
-                st.error("Please enter a prompt before submitting.")
-            elif contains_forbidden_words(user_prompt, st.session_state.forbidden_words):
-                st.error("❌ Oops! You used a forbidden word. Try again!")
-            else:
-                ai_response = generate_ai_response(user_prompt)
-                st.write(f"**AI Response:** {ai_response}")
-                score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round3", st.session_state.question)
-                st.session_state.round_scores.append(("Round 3", score))
-                st.session_state.total_score += score
-                st.session_state.history.append({
-                    "round": "Round 3",
-                    "question": st.session_state.question,
-                    "prompt": user_prompt,
-                    "response": ai_response,
-                    "score": score,
-                    "breakdown": breakdown
-                })
-                st.write(f"**Score:** {score}/30")
-                st.write(f"**Breakdown:** {breakdown}")
-                st.session_state.submitted_round3 = True
-
-        if st.session_state.submitted_round3 and st.button("Finish Game"):
-            st.session_state.round = 4
-            st.session_state.submitted_round3 = False
-
-    # Round 4: Final Results
-    elif st.session_state.round == 4:
-        st.write(f"### Final Results | Player: {st.session_state.player_name}")
-        st.write("🎉 Congratulations on completing the challenge!")
-        for round_name, round_score in st.session_state.round_scores:
-            st.write(f"{round_name}: {round_score}/30")
-        st.write(f"**Total Score:** {st.session_state.total_score}/90")
-        if st.button("Review Previous Rounds"):
-            st.session_state.round = 5
-        if st.button("Play Again"):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.session_state.round = 0
-
-    # Round 5: Review Mode
-    elif st.session_state.round == 5:
-        st.write(f"### Review Your Game | Player: {st.session_state.player_name}")
-        for entry in st.session_state.history:
-            st.write(f"#### {entry['round']}")
-            if entry['round'] == "Round 2":
-                st.write(f"**AI Output:** {entry['question']}")
-            else:
-                st.write(f"**Question/Challenge:** {entry['question']}")
-            st.write(f"**Your Prompt:** {entry['prompt']}")
-            st.write(f"**AI Response:** {entry['response']}")
-            st.write(f"**Score:** {entry['score']}/30")
-            st.write(f"**Breakdown:** {entry['breakdown']}")
+        st.write("### Final Results")
+        st.write(f"**Total Score:** {st.session_state.total_score}/10")
+        sorted_history = sorted(st.session_state.history, key=lambda x: x['score'], reverse=True)
+        st.write("### Top Prompts")
+        for entry in sorted_history[:3]:
+            st.write(f"**Prompt:** {entry['prompt']}")
+            st.write(f"**Score:** {entry['score']}/10")
             st.write("---")
-        if st.button("Back to Results"):
-            st.session_state.round = 4
         if st.button("Play Again"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
