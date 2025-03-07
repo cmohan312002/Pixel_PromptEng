@@ -11,7 +11,7 @@ if not api_key:
     st.stop()
 genai.configure(api_key=api_key)
 
-# Enhanced AI response generation with error handling
+# Generate AI response with error handling
 def generate_ai_response(prompt):
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
@@ -20,74 +20,119 @@ def generate_ai_response(prompt):
     except Exception as e:
         return f"Error generating response: {str(e)}"
 
-# Improved prompt evaluation and scoring system
-def evaluate_prompt(question, user_prompt, ai_response):
+# Check for forbidden words
+def contains_forbidden_words(prompt, forbidden_words):
+    return any(word.lower() in prompt.lower() for word in forbidden_words)
+
+# Score calculation based on question and input
+def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
+    if not prompt.strip():
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, "rule_compliance": 0}
+    
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        eval_prompt = (
-            f"Evaluate how well the given user prompt aligns with the provided question. "
-            f"Assign a score out of 10 for each category: Relevance, Creativity, Clarity, and Efficiency. "
-            f"Provide a total score out of 40 and concise feedback.\n\n"
-            f"**Question:** {question}\n"
-            f"**User Prompt:** {user_prompt}\n"
-            f"**AI Response:** {ai_response}\n\n"
-            f"### Evaluation Criteria:\n"
-            f"- **Relevance (X/10)**: How well does the prompt address the question?\n"
-            f"- **Creativity (Y/10)**: How unique and effective is the prompt?\n"
-            f"- **Clarity (Z/10)**: How well-structured and understandable is the prompt?\n"
-            f"- **Efficiency (W/10)**: Does the prompt get a meaningful response concisely?\n"
-            f"\nProvide the final score in this format:\n"
-            f"- Relevance: X/10\n- Creativity: Y/10\n- Clarity: Z/10\n- Efficiency: W/10\n- **Total Score: (X+Y+Z+W)/40**\n"
-            f"- Feedback: <Concise improvement points>"
-        )
-        eval_response = model.generate_content(eval_prompt).text
+        accuracy = 10 - (sum(1 for word in forbidden_words if word.lower() in prompt.lower()))
+        accuracy = max(0, accuracy)  # Ensure score doesn't go negative
         
-        # Extract scores using regex
-        scores = re.findall(r"(\d+)/10", eval_response)
-        if len(scores) >= 4:
-            relevance, creativity, clarity, efficiency = map(int, scores[:4])
-            total_score = relevance + creativity + clarity + efficiency
-        else:
-            return 5, 5, 5, 5, 20, "Default score due to parsing issue."
+        scores = {
+            "accuracy": accuracy,
+            "creativity": min(10, len(set(prompt.split())) // 2),
+            "clarity": min(10, 10 - abs(15 - len(prompt.split())) // 2),
+            "efficiency": min(10, 10 - len(prompt.split()) // 5) if len(prompt.split()) > 0 else 0,
+            "rule_compliance": 10 if not contains_forbidden_words(prompt, forbidden_words) else 0
+        }
         
-        # Extract feedback
-        feedback_match = re.search(r"Feedback:\s*(.*)", eval_response)
-        feedback = feedback_match.group(1) if feedback_match else "No feedback provided."
-        
-        return relevance, creativity, clarity, efficiency, total_score, feedback
+        total_score = sum(scores.values())
+        return total_score, scores
     except Exception as e:
-        return 5, 5, 5, 5, 20, f"Error evaluating: {str(e)}"
+        st.error(f"Error calculating score: {str(e)}")
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, "rule_compliance": 0}
 
-# Main app function
+# Round generators
+def generate_round1():
+    questions = [
+        "Explain what photosynthesis is.",
+        "Describe how a computer works.",
+        "What is the significance of the Eiffel Tower?",
+        "Explain the concept of gravity.",
+        "Describe the process of making coffee."
+    ]
+    forbidden_words_lists = [
+        ["photosynthesis", "plants", "sunlight", "energy", "chlorophyll"],
+        ["computer", "hardware", "software", "CPU", "memory"],
+        ["Eiffel Tower", "Paris", "landmark", "France", "iron"],
+        ["gravity", "force", "Earth", "mass", "Newton"],
+        ["coffee", "beans", "brew", "grind", "caffeine"]
+    ]
+    index = random.randint(0, len(questions) - 1)
+    return questions[index], forbidden_words_lists[index]
+
+def generate_round2():
+    outputs = [
+        "A system that organizes tasks and resources to optimize team productivity.",
+        "A network of devices communicating wirelessly to monitor environments.",
+        "A framework that predicts market trends using historical data.",
+        "A process that ensures software meets user needs through iterative testing.",
+        "A strategy that aligns team goals with organizational objectives."
+    ]
+    forbidden_words_lists = [
+        ["project", "management", "tasks", "team", "productivity"],
+        ["IoT", "devices", "wireless", "network", "sensors"],
+        ["analytics", "market", "data", "trends", "predict"],
+        ["software", "testing", "user", "bugs", "iteration"],
+        ["strategy", "goals", "team", "organization", "plan"]
+    ]
+    index = random.randint(0, len(outputs) - 1)
+    return outputs[index], forbidden_words_lists[index]
+
+def generate_round3():
+    challenges = [
+        "Generate a bedtime story about an astronaut exploring Mars.",
+        "Write a poem about the ocean without mentioning water.",
+        "Describe a futuristic city without using the word 'technology'.",
+        "Explain how a tree grows without using the word 'photosynthesis'.",
+        "Tell a story about a dragon and a knight without using the word 'fire'."
+    ]
+    forbidden_words_lists = [
+        ["astronaut", "space", "Mars", "rocket", "planet"],
+        ["water", "ocean", "sea", "waves", "liquid"],
+        ["technology", "future", "AI", "robot", "smart"],
+        ["photosynthesis", "sunlight", "chlorophyll", "energy", "plants"],
+        ["fire", "flame", "burn", "heat", "dragon"]
+    ]
+    index = random.randint(0, len(challenges) - 1)
+    return challenges[index], forbidden_words_lists[index]
+
+# Main app
 def main():
-    st.title("🚀 Prompt Engineering Challenge - College Edition")
+    st.title("🚀 Prompt Engineering Challenge")
     st.write(f"Date: {datetime.now().strftime('%B %d, %Y')}")
-
+    
     if "round" not in st.session_state:
-        st.session_state.round = 1
-        st.session_state.question = "Describe how a computer works."
-    
-    st.write(f"### Question: {st.session_state.question}")
-    user_prompt = st.text_area("Craft your prompt:", height=100)
-    
-    if st.button("Submit"):
-        if not user_prompt.strip():
-            st.error("Please enter a prompt before submitting.")
-        else:
-            ai_response = generate_ai_response(user_prompt)
-            relevance, creativity, clarity, efficiency, total_score, feedback = evaluate_prompt(
-                st.session_state.question, user_prompt, ai_response
-            )
-            
-            st.write(f"**AI Response:** {ai_response}")
-            st.write(f"### Scoring Breakdown:")
-            st.write(f"- **Relevance:** {relevance}/10")
-            st.write(f"- **Creativity:** {creativity}/10")
-            st.write(f"- **Clarity:** {clarity}/10")
-            st.write(f"- **Efficiency:** {efficiency}/10")
-            st.write(f"- **Total Score:** {total_score}/40")
-            st.write(f"### Feedback:")
-            st.write(feedback)
+        st.session_state.round = 0
+        st.session_state.player_name = ""
+        st.session_state.total_score = 0
 
+    if st.session_state.round == 0:
+        player_name = st.text_input("Enter your name:")
+        if player_name and st.button("Start Game"):
+            st.session_state.player_name = player_name
+            st.session_state.round = 1
+            st.session_state.question, st.session_state.forbidden_words = generate_round1()
+
+    elif st.session_state.round == 1:
+        st.write(f"**Round 1: Forbidden Words Challenge | Player: {st.session_state.player_name}**")
+        st.write(f"**Question:** {st.session_state.question}")
+        st.write(f"**Forbidden Words:** {', '.join(st.session_state.forbidden_words)}")
+        user_prompt = st.text_area("Craft your prompt:")
+        if st.button("Submit"):
+            ai_response = generate_ai_response(user_prompt)
+            score, breakdown = score_prompt(user_prompt, ai_response, st.session_state.forbidden_words, "round1", st.session_state.question)
+            st.session_state.total_score += score
+            st.write(f"**Score:** {score}/50")
+            st.write(f"**Breakdown:** {breakdown}")
+            if st.button("Next Round"):
+                st.session_state.round = 2
+                st.session_state.ai_output, st.session_state.forbidden_words = generate_round2()
+    
 if __name__ == "__main__":
     main()
