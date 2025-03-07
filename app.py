@@ -68,7 +68,7 @@ def contains_forbidden_words(prompt, forbidden_words):
 # Updated scoring system with relevance-based accuracy and input validation
 def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
     if not prompt.strip():
-        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, }
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0 }
     
     try:
         accuracy = check_relevance(question, ai_response)
@@ -87,7 +87,7 @@ def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
         return total_score, scores
     except Exception as e:
         st.error(f"Error calculating score: {str(e)}")
-        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0, "efficiency": 0, }
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0 }
 
 # Round generators
 def generate_round1():
