@@ -196,7 +196,7 @@ def main():
                     "score": score,
                     "breakdown": breakdown
                 })
-                st.write(f"**Score:** {score}/50")
+                st.write(f"**Score:** {score}/30")
                 st.write(f"**Breakdown:** {breakdown}")
                 st.session_state.show_next_round_button = True
 
@@ -230,7 +230,7 @@ def main():
                     "score": score,
                     "breakdown": breakdown
                 })
-                st.write(f"**Score:** {score}/50")
+                st.write(f"**Score:** {score}/30")
                 st.write(f"**Breakdown:** {breakdown}")
                 st.session_state.show_next_round_button = True
 
@@ -264,7 +264,7 @@ def main():
                     "score": score,
                     "breakdown": breakdown
                 })
-                st.write(f"**Score:** {score}/50")
+                st.write(f"**Score:** {score}/30")
                 st.write(f"**Breakdown:** {breakdown}")
                 st.session_state.submitted_round3 = True
 
@@ -277,8 +277,8 @@ def main():
         st.write(f"### Final Results | Player: {st.session_state.player_name}")
         st.write("🎉 Congratulations on completing the challenge!")
         for round_name, round_score in st.session_state.round_scores:
-            st.write(f"{round_name}: {round_score}/50")
-        st.write(f"**Total Score:** {st.session_state.total_score}/150")
+            st.write(f"{round_name}: {round_score}/30")
+        st.write(f"**Total Score:** {st.session_state.total_score}/90")
         if st.button("Review Previous Rounds"):
             st.session_state.round = 5
         if st.button("Play Again"):
@@ -297,7 +297,7 @@ def main():
                 st.write(f"**Question/Challenge:** {entry['question']}")
             st.write(f"**Your Prompt:** {entry['prompt']}")
             st.write(f"**AI Response:** {entry['response']}")
-            st.write(f"**Score:** {entry['score']}/50")
+            st.write(f"**Score:** {entry['score']}/30")
             st.write(f"**Breakdown:** {entry['breakdown']}")
             st.write("---")
         if st.button("Back to Results"):
