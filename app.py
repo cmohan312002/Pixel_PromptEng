@@ -23,40 +23,12 @@ def generate_ai_response(prompt):
 # Check relevance of response to question/output
 def check_relevance(question, response):
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        relevance_prompt = (
-                f"Evaluate the following user-generated prompt based on its alignment with the given question, "
-                f"the creativity of the approach, clarity in phrasing, and efficiency in eliciting a relevant and insightful response. "
-                f"Each evaluation should be based on the following criteria:\n\n"
-                
-                f"- **Relevance**: Does the user’s prompt address the core of the question and provide clear direction for generating a meaningful response?\n"
-                f"- **Creativity**: How innovative or unique is the user’s approach to framing the prompt? Does it introduce new angles or perspectives?\n"
-                f"- **Clarity**: Is the prompt easy to understand and interpret? Are the instructions clear and concise?\n"
-                
-                f"Each round will evaluate the quality of the prompt in these categories, and a score should be assigned from 1 to 10 for each.\n\n"
-                
-                f"Round 1: Evaluate the user prompt based on basic structure and clarity.\n"
-                f"Round 2: Assess creativity and originality in how the prompt engages with the question.\n"
-                f"Round 3: Evaluate the overall impact of the prompt in driving the best, most insightful response.\n\n"
-                
-                f"Here’s how to structure your evaluation:\n"
-                f"- **Relevance**: X/10\n"
-                f"- **Creativity**: Y/10\n"
-                f"- **Clarity**: Z/10\n"
-                
-                f"Example:\n\n"
-                f"Question: {question}\n"
-                f"User Prompt: {user_prompt}\n\n"
-                f"Feedback: Provide concise feedback explaining the scores and suggestions for improvement."
-            )
-        relevance_response = model.generate_content(relevance_prompt).text
-        # Extract the numeric score using regex
-        score_match = re.search(r"Score:\s*(\d+)", relevance_response)
-        if score_match:
-            score = int(score_match.group(1))
-            return min(10, max(0, score))
-        else:
-            return 5  # Default if parsing fails
+        # Simple relevance check: count the number of overlapping words
+        question_words = set(question.lower().split())
+        response_words = set(response.lower().split())
+        overlap = len(question_words.intersection(response_words))
+        relevance_score = min(10, overlap * 2)  # Scale overlap to a score out of 10
+        return relevance_score
     except Exception as e:
         st.warning(f"Error checking relevance: {str(e)}. Defaulting to 5.")
         return 5
@@ -72,17 +44,23 @@ def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
     
     try:
         accuracy = check_relevance(question, ai_response)
-        scores = {
-            "accuracy": accuracy,
-            "creativity": min(10, len(set(prompt.split())) // 2),
-            "clarity": min(10, 10 - abs(15 - len(prompt.split())) // 2),
-        }
+        creativity = min(10, len(set(prompt.split())) // 2)  # Creativity based on unique words
+        clarity = min(10, 10 - abs(15 - len(prompt.split())) // 2)  # Clarity based on prompt length
+        
+        # Adjust scores based on round type
         if round_type == "round1":
-            scores["creativity"] = min(10, scores["creativity"] + 2)
+            creativity = min(10, creativity + 2)
         elif round_type == "round2":
-            scores["accuracy"] = min(10, scores["accuracy"] + 2)
+            accuracy = min(10, accuracy + 2)
         elif round_type == "round3":
-            scores["clarity"] = min(10, scores["clarity"] + 2)
+            clarity = min(10, clarity + 2)
+        
+        scores = {
+            "accuracy": max(0, accuracy),  # Ensure no negative scores
+            "creativity": max(0, creativity),
+            "clarity": max(0, clarity),
+        }
+        
         total_score = sum(scores.values())
         return total_score, scores
     except Exception as e:
