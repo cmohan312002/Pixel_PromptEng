@@ -37,12 +37,25 @@ def check_relevance(question, response):
 def contains_forbidden_words(prompt, forbidden_words):
     return any(word.lower() in prompt.lower() for word in forbidden_words)
 
+# Normalize scores to ensure they are within 1-10
+def normalize_scores(scores):
+    for key in scores:
+        scores[key] = max(1, min(10, scores[key]))  # Ensuring values are between 1 and 10
+    return scores
+
+# Calculate weighted score based on predefined weights
+def weighted_score(scores):
+    weights = {"accuracy": 0.4, "creativity": 0.3, "clarity": 0.3}  # Adjust weights as needed
+    total = sum(scores[k] * weights[k] for k in scores)
+    return round(total, 2)
+
 # Updated scoring system with relevance-based accuracy and input validation
 def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
     if not prompt.strip():
-        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0 }
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0}
     
     try:
+        # Calculate raw scores
         accuracy = check_relevance(question, ai_response)
         creativity = min(10, len(set(prompt.split())) // 2)  # Creativity based on unique words
         clarity = min(10, 10 - abs(15 - len(prompt.split())) // 2)  # Clarity based on prompt length
@@ -55,17 +68,23 @@ def score_prompt(prompt, ai_response, forbidden_words, round_type, question):
         elif round_type == "round3":
             clarity = min(10, clarity + 2)
         
+        # Create scores dictionary
         scores = {
             "accuracy": max(0, accuracy),  # Ensure no negative scores
             "creativity": max(0, creativity),
             "clarity": max(0, clarity),
         }
         
-        total_score = sum(scores.values())
+        # Normalize scores to ensure they are within 1-10
+        scores = normalize_scores(scores)
+        
+        # Calculate weighted total score
+        total_score = weighted_score(scores)
+        
         return total_score, scores
     except Exception as e:
         st.error(f"Error calculating score: {str(e)}")
-        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0 }
+        return 0, {"accuracy": 0, "creativity": 0, "clarity": 0}
 
 # Round generators
 def generate_round1():
@@ -109,6 +128,7 @@ def generate_round3():
         "Generate a bedtime story about an astronaut exploring Mars.",
         "Write a poem about the ocean without mentioning water.",
         "Describe a futuristic city without using the word 'technology'.",
+        "Explain how a tree grows without using the word 'photosynthesis'.",
         "Tell a story about a dragon and a knight without using the word 'fire'."
     ]
     forbidden_words_lists = [
