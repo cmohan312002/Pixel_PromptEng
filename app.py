@@ -117,7 +117,6 @@ def generate_round3():
         "Generate a bedtime story about an astronaut exploring Mars.",
         "Write a poem about the ocean without mentioning water.",
         "Describe a futuristic city without using the word 'technology'.",
-        "Explain how a tree grows without using the word 'photosynthesis'.",
         "Tell a story about a dragon and a knight without using the word 'fire'."
     ]
     forbidden_words_lists = [
