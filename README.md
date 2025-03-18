@@ -1,5 +1,3 @@
-Here’s a complete **README.md** file for your GitHub repo, including sections like installation, usage, and contribution. You can tweak or expand this as needed for your project setup.
-
 ---
 
 # 🚀 Prompt Engineering Challenge – College Edition 🎮
@@ -114,4 +112,3 @@ Questions or feedback? Reach out via [email](mailto:cmohan312002@gmail.com) or o
 
 ---
 
-Let me know if you’d like to include badges (e.g., Streamlit, Gemini AI, License), sample screenshots, or hosting instructions for Streamlit Cloud!
